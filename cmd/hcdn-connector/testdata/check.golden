@@ -1,0 +1,4 @@
+OK   config: $DIR/config.yml (tunnel 3f9c2a7e-0b3e-4d0a-9d0a-1c8f5e7b2a11, 2 ingress rules, ports [7844 443], mode auto)
+WARN credentials: $DIR/credentials.json (serial $SERIAL, 9 days left, bootstrap [bnk.tunnel.example])
+OK   shop.example.com                         -> $SVC
+OK   (catch-all)                              -> http_status:404

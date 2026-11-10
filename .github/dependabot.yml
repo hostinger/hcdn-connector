@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directories: ["/", "/examples/embed"]
+    schedule:
+      interval: weekly
+    groups:
+      go:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /packaging
+    schedule:
+      interval: weekly
+    # A golang tag bump fails lint until go.mod and the workflows move with it,
+    # so it gets its own PR and never holds up the distroless refresh.
+    groups:
+      golang:
+        patterns: ["golang"]
+      docker:
+        patterns: ["*"]
+        exclude-patterns: ["golang"]

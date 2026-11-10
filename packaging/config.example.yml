@@ -1,0 +1,48 @@
+# hcdn-connector configuration. Unknown keys are rejected.
+# Full reference: docs/standalone.md "Configuration".
+
+tunnel_id: 3f9c2a7e-0b3e-4d0a-9d0a-1c8f5e7b2a11
+credentials_file: /etc/hcdn-connector/credentials.json   # must be mode 0600
+
+home_pops: 2                   # PoPs to keep sessions to (1..3)
+sessions_per_pop: 2            # sessions per PoP (1..4)
+
+pop_selection:
+  mode: auto                   # auto = probe and pick the fastest; manual = use `pops`
+  # pops: [fra, phx]           # manual only; must be inside the tunnel's allowed PoPs
+  reprobe_interval: 10m
+  switch_min_gain_pct: 20      # switch only when a PoP is faster by both thresholds...
+  switch_min_gain_ms: 15
+  holddown: 30m                # ...and the current PoP has been in place this long
+
+ports: [7844, 443]             # tried in order per endpoint; 443 = HTTPS fallback through nginx
+
+ingress:
+  - hostname: shop.example.com
+    service: http://127.0.0.1:8080
+  - hostname: "*.example.com"
+    service: https://10.0.0.5:8443
+    origin_request:
+      tls_server_name: app.internal
+      ca_file: /etc/ssl/internal-ca.pem
+      no_tls_verify: false
+      connect_timeout: 5s
+      response_header_timeout: 45s   # keep below the edge's 50 s so a slow service is attributed here
+      keepalive_connections: 16
+      http_host_header: ""     # default: pass the visitor Host through
+  - service: http_status:404   # required catch-all: an unknown Host is never proxied
+
+# admin_socket: /run/hcdn-connector/admin.sock # default per OS (docs/standalone.md); "" disables the socket (and `status`)
+metrics_addr: 127.0.0.1:9112   # Prometheus /metrics; set to "" to disable; loopback only
+
+# server_spki_pins: ["sha256/…"]           # optional: pin the edge certificate chain
+# server_ca_file: /etc/hcdn-connector/ca.pem  # optional: private CA (test setups only)
+
+# Services on a sensitive port of this machine (SSH, databases, debuggers,
+# cluster agents; docs/standalone.md "Request handling") are refused. List a port here
+# only to publish it on purpose.
+# allow_local_ports: [9200]
+
+log:
+  format: json                 # json | text
+  level: info                  # debug | info | warn | error

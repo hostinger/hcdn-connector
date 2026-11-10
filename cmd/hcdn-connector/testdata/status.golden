@@ -1,0 +1,23 @@
+hcdn-connector 0.1.1  connector-id c0ffee  tunnel 3f9c2a7e-0b3e-4d0a-9d0a-1c8f5e7b2a11  up 1h30m0s
+certificate serial 1f, 200 days left
+PAUSED (tunnel disabled) until 2026-10-01T12:05:00Z
+
+selection: bnk,fra  (trigger startup at 2026-10-01T11:00:00Z, pop list gen 41 from fra.tunnel.example)
+  reason: bnk: fastest; fra: second region
+
+POP  ENDPOINT            REGION      ALLOWED  PINNED  SELECTED  PORT  RTT_MS  ERROR
+bnk  bnk.tunnel.example  eu-north    yes      yes     yes       7844  12.3    
+fra  fra.tunnel.example  eu-central  yes      no      yes       443   20.0    
+mum  mum.tunnel.example  ap-south    yes      no      no        -     -       timeout
+phx  phx.tunnel.example  us-west     no       no      no        -     -       
+
+POP  SLOT  STATE       ADDR                                     PORT  TRANSPORT  EDGE_NODE   SINCE   INFLIGHT  PAUSED_UNTIL
+bnk  0     ready       2001:db8::1                              7844  7844       pop1-edge1  42s     1/512     
+bnk  1     connecting                                           -                                              
+bnk        draining    1 replaced session(s) finishing streams                                                 
+fra  0     paused                                               -                                              2026-10-01T12:01:00Z (cap_exceeded)
+fra  1     idle                                                 -                                              2026-10-01T12:01:00Z (cap_exceeded)
+fra        last error  dial tcp: connection refused                                          3s ago            
+
+last errors:
+  11:59:50 WARN  dial failed pop=fra

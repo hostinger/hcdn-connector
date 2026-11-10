@@ -1,0 +1,58 @@
+[Unit]
+Description=Hostinger CDN tunnel connector
+Documentation=https://github.com/hostinger/hcdn-connector
+After=network-online.target
+Wants=network-online.target
+# 10 failed starts in 60 s stop the unit instead of looping (bad service URL, DNS down at boot).
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=simple
+DynamicUser=no
+User=hcdn-connector
+Group=hcdn-connector
+ExecStart=/usr/bin/hcdn-connector run --config /etc/hcdn-connector/config.yml
+ExecReload=/bin/kill -HUP $MAINPID
+RuntimeDirectory=hcdn-connector
+RuntimeDirectoryMode=0750
+ConfigurationDirectory=hcdn-connector
+
+Restart=on-failure
+RestartSec=5s
+# 78 = bad config/credentials or tunnel revoked: restarting cannot help.
+RestartPreventExitStatus=78
+KillSignal=SIGTERM
+TimeoutStopSec=25s
+LimitNOFILE=65536
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RemoveIPC=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+# AF_NETLINK: the local port guard reads the interface addresses through it;
+# without it, every sensitive port is refused on every host.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+# No ~@resources: the Go runtime calls setrlimit(RLIMIT_NOFILE) at start.
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+
+[Install]
+WantedBy=multi-user.target

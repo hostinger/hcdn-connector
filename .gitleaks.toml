@@ -1,0 +1,7 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "RFC 6455 sample Sec-WebSocket-Key (base64 of 'the sample nonce'); TEST ONLY owner ticket keys and tickets (copied from the edge test vectors)"
+regexes = ['''dGhlIHNhbXBsZSBub25jZQ==''']
+paths = ['''pkg/connector/testdata/owner_ticket\.json''']

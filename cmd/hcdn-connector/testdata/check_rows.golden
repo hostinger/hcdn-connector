@@ -1,0 +1,5 @@
+OK   shop.example.com                         -> http://127.0.0.1:8080
+FAIL api.example.com                          -> https://10.0.0.5:8443: dial tcp 10.0.0.5:8443: connect: connection refused (service_unreachable)
+OK   (catch-all)                              -> http_status:404
+OK   whoami via bnk.tunnel.example: tunnel 3f9c2a7e-0b3e-4d0a-9d0a-1c8f5e7b2a11 serial 1f days_left 200 pop bnk node pop1-edge1
+FAIL whoami: no bootstrap endpoint answered

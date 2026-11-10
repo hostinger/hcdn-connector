@@ -1,0 +1,12 @@
+hcdn-connector -- Hostinger CDN tunnel connector
+
+Usage:
+  hcdn-connector quick   --url http://localhost:8080 [--host-header localhost]
+  hcdn-connector run     --config /etc/hcdn-connector/config.yml
+  hcdn-connector check   --config /etc/hcdn-connector/config.yml [--whoami]
+  hcdn-connector csr     --out key.pem,csr.pem --tunnel-id <uuid>
+  hcdn-connector status  [--config ...] [--socket /run/hcdn-connector/admin.sock] [--json]
+  hcdn-connector version
+
+Exit codes: 0 ok, 1 failure, 2 usage, 77 quick tunnel needs a Hostinger account,
+78 bad config/credentials or tunnel revoked.

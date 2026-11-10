@@ -1,0 +1,13 @@
+/dist/
+/hcdn-connector
+*.deb
+*.rpm
+*.test
+*.out
+coverage.*
+testdata/fuzz/
+.DS_Store
+/config.yml
+/credentials.json
+*.pem
+examples/embed/embed

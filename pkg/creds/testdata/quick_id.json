@@ -1,0 +1,33 @@
+{
+  "comment": "Quick tunnel id vectors: id = SHA-256(SPKI DER || uint64_be(not_before_unix))[0:16], UUIDv8 version and variant bits. label = id without dashes. Shared by hcdn-connector and the edge (tunneld).",
+  "vectors": [
+    {
+      "spki_der_hex": "3059301306072a8648ce3d020106082a8648ce3d030107034200041c95ff8198efe1dc8f18addd7afb49739ace638f0aabe905e33f1832a619ab27e749ceb5988eaecfd0cce1511f472363f4a65c253265e05ba24d18821619f085",
+      "not_before": "2026-10-07T12:05:00Z",
+      "not_before_unix": 1791374700,
+      "id": "153b4325-7e60-89b0-adf3-11b3455e487f",
+      "label": "153b43257e6089b0adf311b3455e487f"
+    },
+    {
+      "spki_der_hex": "3059301306072a8648ce3d020106082a8648ce3d030107034200047bf310e3c365554be73e626dd4310fe8e10f8e5299e0b54be3e873d89cf7945a8018914240e606acdb43dd1c3108c17effcca02930765a95a2fb7b37a6cf02b3",
+      "not_before": "2026-10-07T12:05:01Z",
+      "not_before_unix": 1791374701,
+      "id": "af7fcb45-9385-8387-90f7-8e82764f8e4d",
+      "label": "af7fcb459385838790f78e82764f8e4d"
+    },
+    {
+      "spki_der_hex": "3059301306072a8648ce3d020106082a8648ce3d030107034200049f3fcbf99306febcb4ad2c45147faa4376dc960a40f2372a76e989aaf042c2fb550b20285be3203c87609085347aac656e2bf25cc313d2f3622ff0b552a690e0",
+      "not_before": "2027-01-15T08:00:00Z",
+      "not_before_unix": 1800000000,
+      "id": "a71fc0e6-55a2-8e18-b6eb-a6ebc3b56bfa",
+      "label": "a71fc0e655a28e18b6eba6ebc3b56bfa"
+    },
+    {
+      "spki_der_hex": "3059301306072a8648ce3d020106082a8648ce3d030107034200041c95ff8198efe1dc8f18addd7afb49739ace638f0aabe905e33f1832a619ab27e749ceb5988eaecfd0cce1511f472363f4a65c253265e05ba24d18821619f085",
+      "not_before": "2026-10-07T12:05:01Z",
+      "not_before_unix": 1791374701,
+      "id": "f3a35070-429c-8e5c-92f0-7d424b56d57a",
+      "label": "f3a35070429c8e5c92f07d424b56d57a"
+    }
+  ]
+}
