@@ -54,7 +54,7 @@ func TestQuickIDVectors(t *testing.T) {
 		if !IsQuickID(got) {
 			t.Errorf("IsQuickID(%s) = false", got)
 		}
-		if h := QuickHostname(got, "hostingersite.dev"); h != v.Label+".hostingersite.dev" {
+		if h := QuickHostname(got, "hostingerpreview.dev"); h != v.Label+".hostingerpreview.dev" {
 			t.Errorf("QuickHostname = %s", h)
 		}
 	}
