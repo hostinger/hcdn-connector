@@ -11,7 +11,7 @@ permissions:
 # Tool versions are pinned here, in release.yml and in the Makefile; bump them together.
 # GO_VERSION equals the toolchain line of go.mod; lint checks it.
 env:
-  GO_VERSION: "1.27.3"
+  GO_VERSION: "1.27.4"
   STATICCHECK_VERSION: v0.8.2
   GOVULNCHECK_VERSION: v1.9.0
   NFPM_VERSION: v2.47.0
@@ -130,8 +130,6 @@ jobs:
             GOOS=${t%/*} GOARCH=${t#*/} CGO_ENABLED=0 go build -o /dev/null .
           done
       - name: gorelease (API diff of pkg/...)
-        # Warning only before v0.2.0; drop continue-on-error after that tag.
-        continue-on-error: true
         run: |
           base=$(git describe --tags --abbrev=0 2>/dev/null || true)
           if [ -z "$base" ]; then echo "no tag yet"; exit 0; fi
