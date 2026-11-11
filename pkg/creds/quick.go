@@ -52,7 +52,10 @@ func IsQuickID(id string) bool {
 	return id[14] == '8' && strings.IndexByte("89ab", id[19]) >= 0
 }
 
-// QuickHostname is the public hostname of a quick tunnel in zone.
+// QuickHostname is the hex form of a quick tunnel's hostname in zone:
+// <id without dashes>.<zone>. The edge may serve a word label instead
+// (docs/protocol.md section 8), so the hostname a tunnel actually has comes
+// from whoami, never from this function.
 func QuickHostname(id, zone string) string {
 	return strings.ReplaceAll(strings.ToLower(id), "-", "") + "." + zone
 }
