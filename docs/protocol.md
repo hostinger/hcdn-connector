@@ -247,14 +247,16 @@ never takes the CA chain path, and a named id never takes the quick path.
 | Id | `h = SHA-256(SPKI DER ‖ uint64_be(NotBefore unix seconds))`; `id = h[0:16]`; `id[6] = (id[6] & 0x0f) \| 0x80`; `id[8] = (id[8] & 0x3f) \| 0x80`; lowercase canonical UUID |
 | SPKI DER | The certificate `SubjectPublicKeyInfo` bytes |
 | Leaf | Self-signed, no intermediates, random 128-bit serial, `KeyUsage digitalSignature`, EKU `clientAuth`, exactly one URI SAN `hcdn-tunnel:<id>`, no other SAN, not a CA |
-| Hostname | `<id without dashes>.<zone>`. The edge owns the zone (`hostingerpreview.com` in production, `hostingerpreview.dev` on staging). The connector learns the hostname from `whoami` |
+| Hostname | Chosen by the edge, which owns the zone (`hostingerpreview.com` in production, `hostingerpreview.dev` on staging). Either `<id without dashes>.<zone>`, or a word label `<color>-<animal>-<8 digits>.<zone>` derived from the id with a key only the edge holds. The connector learns the hostname from `whoami`, serves only that hostname, and never derives it |
 | Lifetime | tunneld aborts quick sessions at `NotAfter`. The connector stops 1 min before. No renewal: a new certificate is a new id and a new hostname |
 | Takedown | goaway `revoked` (exit 78). tunneld keeps the id refused for the rest of its life |
 | Limits | goaway `cap_exceeded` when the network of the client (/24 or /56) or the node holds too many quick tunnels |
 
 The TLS 1.3 CertificateVerify proves possession of the private key. A client
 that wants another quick hostname needs that private key, or a SHA-256
-second preimage on 122 bits.
+second preimage on 122 bits. A word label is shorter, but without the edge
+key a client cannot tell which id gives which label, so it cannot search
+offline for an id that maps to someone else's label.
 
 Test vectors: `pkg/creds/testdata/quick_id.json`. The edge (tunneld) uses
 the same vectors, so a change to the derivation needs a matching edge change.

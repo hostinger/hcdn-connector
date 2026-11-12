@@ -42,7 +42,7 @@ func (s *syncBuffer) String() string {
 func TestQuickServesTheDerivedHostname(t *testing.T) {
 	ca := testpki.NewCA(t)
 	edge := testedge.New(t, ca, "bnk", false)
-	edge.SetQuickZone("hostingersite.dev")
+	edge.SetQuickZone("hostingerpreview.dev")
 	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "host="+r.Host) }))
 	defer svc.Close()
 	caFile := filepath.Join(t.TempDir(), "ca.pem")
@@ -64,7 +64,7 @@ func TestQuickServesTheDerivedHostname(t *testing.T) {
 		t.Fatalf("hello: %v", s.HelloErr)
 	}
 	var host string
-	re := regexp.MustCompile(`https://([0-9a-f]{12}8[0-9a-f]{3}[89ab][0-9a-f]{15}\.hostingersite\.dev)\n`)
+	re := regexp.MustCompile(`https://([0-9a-f]{12}8[0-9a-f]{3}[89ab][0-9a-f]{15}\.hostingerpreview\.dev)\n`)
 	deadline := time.Now().Add(5 * time.Second)
 	for host == "" && time.Now().Before(deadline) {
 		if m := re.FindStringSubmatch(out.String()); m != nil {
@@ -84,7 +84,7 @@ func TestQuickServesTheDerivedHostname(t *testing.T) {
 	if res.StatusCode != 200 || string(body) != "host=localhost" {
 		t.Fatalf("got %d %q", res.StatusCode, body)
 	}
-	res = s.Get(t, "other.hostingersite.dev", "/")
+	res = s.Get(t, "other.hostingerpreview.dev", "/")
 	res.Body.Close()
 	if res.StatusCode != 404 {
 		t.Fatalf("another host must hit the catch-all 404, got %d", res.StatusCode)

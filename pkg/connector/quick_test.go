@@ -23,7 +23,7 @@ import (
 func TestWhoamiQuick(t *testing.T) {
 	ca := testpki.NewCA(t)
 	edge := testedge.New(t, ca, "bnk", false)
-	edge.SetQuickZone("hostingersite.dev")
+	edge.SetQuickZone("hostingerpreview.dev")
 	caFile := filepath.Join(t.TempDir(), "ca.pem")
 	if err := os.WriteFile(caFile, ca.PEM, 0o644); err != nil {
 		t.Fatal(err)
@@ -40,7 +40,7 @@ func TestWhoamiQuick(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w.Class != ClassQuick || w.TunnelID != c.TunnelID || w.Hostname != creds.QuickHostname(c.TunnelID, "hostingersite.dev") {
+	if w.Class != ClassQuick || w.TunnelID != c.TunnelID || w.Hostname != creds.QuickHostname(c.TunnelID, "hostingerpreview.dev") {
 		t.Fatalf("whoami %+v", w)
 	}
 	if !w.ExpiresAt.Equal(c.Leaf.NotAfter) {
