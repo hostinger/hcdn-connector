@@ -49,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest, windows-11-arm]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -63,9 +63,13 @@ jobs:
         run: go vet ./...
       - name: go test -race
         # -race needs cgo; the hosted runners have a C compiler.
+        if: matrix.os != 'windows-11-arm'
         env:
           CGO_ENABLED: "1"
         run: go test -race -count=1 ./...
+      - name: go test (windows/arm64 has no race detector)
+        if: matrix.os == 'windows-11-arm'
+        run: go test -count=1 ./...
       - name: h2srv with the http2legacy tag (a consumer can set it)
         if: runner.os == 'Linux'
         run: go test -tags http2legacy -count=1 ./internal/h2srv/

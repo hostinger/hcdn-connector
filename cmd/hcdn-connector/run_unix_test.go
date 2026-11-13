@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strconv"
 	"syscall"
 	"testing"
@@ -63,19 +62,7 @@ func runAndStop(t *testing.T, extra string, during func(*testedge.Session)) {
 	t.Helper()
 	ca := testpki.NewCA(t)
 	edge := testedge.New(t, ca, "bnk", false)
-	dir := t.TempDir()
-	credsPath := ca.WriteCredentials(t, dir, tid, []string{"127.0.0.1"}, time.Now().Add(400*24*time.Hour))
-	caFile := filepath.Join(dir, "ca.pem")
-	if err := os.WriteFile(caFile, ca.PEM, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg := filepath.Join(dir, "config.yml")
-	src := "tunnel_id: " + tid + "\ncredentials_file: " + credsPath + "\nserver_ca_file: " + caFile +
-		"\nports: [" + strconv.Itoa(edge.Port()) + "]\nhome_pops: 1\nsessions_per_pop: 1\nadmin_socket: \"\"\nmetrics_addr: \"\"\n" +
-		"log:\n  level: error\n" + extra
-	if err := os.WriteFile(cfg, []byte(src), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	cfg := writeRunConfig(t, ca, edge, extra)
 	var errOut bytes.Buffer
 	code := make(chan int, 1)
 	go func() { code <- cmdRun([]string{"--config", cfg}, &errOut) }()

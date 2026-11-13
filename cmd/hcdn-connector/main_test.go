@@ -22,6 +22,26 @@ import (
 
 const tid = "3f9c2a7e-0b3e-4d0a-9d0a-1c8f5e7b2a11"
 
+// writeRunConfig writes credentials and a config for `run` against edge,
+// with extra config keys, and returns the config path.
+func writeRunConfig(t *testing.T, ca *testpki.CA, edge *testedge.Edge, extra string) string {
+	t.Helper()
+	dir := t.TempDir()
+	credsPath := ca.WriteCredentials(t, dir, tid, []string{"127.0.0.1"}, time.Now().Add(400*24*time.Hour))
+	caFile := filepath.Join(dir, "ca.pem")
+	if err := os.WriteFile(caFile, ca.PEM, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(dir, "config.yml")
+	src := "tunnel_id: " + tid + "\ncredentials_file: " + credsPath + "\nserver_ca_file: " + caFile +
+		"\nports: [" + strconv.Itoa(edge.Port()) + "]\nhome_pops: 1\nsessions_per_pop: 1\nadmin_socket: \"\"\nmetrics_addr: \"\"\n" +
+		"log:\n  level: error\n" + extra
+	if err := os.WriteFile(cfg, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
+
 func writeConfig(t *testing.T, dir, credsPath, service string) string {
 	t.Helper()
 	cfg := `
