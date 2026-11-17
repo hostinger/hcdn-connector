@@ -552,3 +552,52 @@ func TestRunQuickPauseBeforeReady(t *testing.T) {
 		t.Fatalf("cancel: %+v", res)
 	}
 }
+
+func TestRunQuickLifetime(t *testing.T) {
+	start := time.Now()
+	r := startRunQuick(t, "", QuickOptions{Lifetime: 3 * 24 * time.Hour})
+	q := r.waitReady(t)
+	want := start.Add(3*24*time.Hour - 5*time.Minute)
+	if q.ExpiresAt.Before(want.Add(-time.Minute)) || q.ExpiresAt.After(want.Add(time.Minute)) {
+		t.Fatalf("expires_at %s, want about %s", q.ExpiresAt, want)
+	}
+	r.cancel()
+	if got := r.wait(t); got.expired || got.err != nil {
+		t.Fatalf("cancel: %+v", got)
+	}
+}
+
+// An edge that allows 24 h refuses a longer certificate in the handshake;
+// a second whoami with the default lifetime tells that refusal apart.
+func TestRunQuickLifetimeRefused(t *testing.T) {
+	ca := testpki.NewCA(t)
+	edge := testedge.New(t, ca, "bnk", false)
+	edge.SetQuickZone(quickZone)
+	edge.QuickMaxLifetime = creds.DefaultQuickLifetime
+	_, err := RunQuick(context.Background(), quickOpts(t, ca, edge.Port(), QuickOptions{Lifetime: 48 * time.Hour}))
+	var qe *QuickError
+	if !errors.Is(err, ErrLifetimeRefused) || !errors.As(err, &qe) || qe.Err == nil {
+		t.Fatalf("48 h against a 24 h edge: %v", err)
+	}
+
+	// The default lifetime is never probed: a refusal stays ErrQuickRefused.
+	noQuick := testedge.New(t, ca, "bnk", false)
+	if _, err := RunQuick(context.Background(), quickOpts(t, ca, noQuick.Port(), QuickOptions{Lifetime: 48 * time.Hour})); !errors.Is(err, ErrQuickRefused) {
+		t.Fatalf("an edge without quick tunnels: %v", err)
+	}
+}
+
+func TestRunQuickLifetimeOutOfRange(t *testing.T) {
+	for _, d := range []time.Duration{500 * time.Millisecond, time.Minute, creds.MaxQuickLifetime + time.Second, -time.Hour} {
+		_, err := RunQuick(context.Background(), QuickOptions{URL: "http://127.0.0.1:1", Lifetime: d, Bootstrap: []string{"127.0.0.1"}})
+		var qe *QuickError
+		if err == nil || errors.As(err, &qe) || !strings.Contains(err.Error(), "QuickOptions.Lifetime") {
+			t.Errorf("lifetime %s: %v", d, err)
+		}
+	}
+	// A bad bootstrap entry with a valid lifetime is not blamed on Lifetime.
+	_, err := RunQuick(context.Background(), QuickOptions{URL: "http://127.0.0.1:1", Lifetime: 48 * time.Hour, Bootstrap: []string{"not a host"}})
+	if err == nil || strings.Contains(err.Error(), "Lifetime") || !strings.Contains(err.Error(), "bootstrap") {
+		t.Errorf("bad bootstrap: %v", err)
+	}
+}
