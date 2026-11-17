@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/hostinger/hcdn-connector/pkg/config"
 	"github.com/hostinger/hcdn-connector/pkg/connector"
 	"github.com/hostinger/hcdn-connector/pkg/localguard"
+	"github.com/hostinger/hcdn-connector/pkg/quickview"
 )
 
 // Set with -ldflags "-X main.quickTermsURL=... -X main.quickFeedbackURL=...".
@@ -116,24 +118,60 @@ func cmdQuick(args []string, stdout, stderr io.Writer) int {
 // nil means no way to get it (unsupported).
 func runQuick(ctx context.Context, f *quickFlags, owner connector.OwnerTicketFunc, stdout, stderr io.Writer) int {
 	ready := false
+	// A person at a terminal gets the animated view; pipes keep plain lines.
+	view := quickViewFor(stdout, f.url)
+	logOut := stderr
+	if view != nil {
+		view.Start()
+		logOut = view.LogWriter(stderr)
+	}
 	expired, err := connector.RunQuick(ctx, connector.QuickOptions{
 		URL: f.url, HostHeader: f.hostHeader, Bootstrap: f.bootstrapAddrs, Ports: f.ports, ServerCAFile: f.serverCA,
-		Version: version, Logger: logging.New(stderr, config.Log{Format: "text", Level: f.logLevel}, nil), Owner: owner,
+		Version: version, Logger: logging.New(logOut, config.Log{Format: "text", Level: f.logLevel}, nil), Owner: owner,
 		OnReady: func(q connector.QuickTunnel) {
 			ready = true
+			if view != nil {
+				account := ""
+				if owner != nil {
+					account = strings.TrimSuffix(ownerLine(q.Owner), ".")
+				}
+				view.Ready(q, account)
+				return
+			}
 			printQuickReady(stdout, q, owner != nil)
 		},
-		OnReachable: func(connector.QuickTunnel) { fmt.Fprintln(stdout, "Your quick tunnel is ready.") },
+		OnReachable: func(connector.QuickTunnel) {
+			if view != nil {
+				view.Reachable()
+				return
+			}
+			fmt.Fprintln(stdout, "Your quick tunnel is ready.")
+		},
 		OnPause: func(p connector.QuickPause) {
+			if view != nil {
+				view.Paused("Too many quick tunnels from your network. Retrying at "+
+					p.RetryAt.Local().Format("15:04")+".", p.RetryAt)
+				return
+			}
 			fmt.Fprintf(stderr, "hcdn-connector: too many quick tunnels from your network; retrying at %s\n",
 				p.RetryAt.UTC().Format(time.TimeOnly))
 		},
 	})
+	if view != nil {
+		switch {
+		case err == nil && expired:
+			view.End(quickview.Expired)
+		case err == nil:
+			view.End(quickview.Stopped)
+		default:
+			view.End(quickview.Failed)
+		}
+	}
 	var qe *connector.QuickError
 	var ee *connector.ExitError
 	switch {
 	case err == nil:
-		if expired {
+		if expired && view == nil {
 			fmt.Fprintln(stdout, "tunnel expired; run the command again for a new URL")
 		}
 		return exitOK
@@ -229,4 +267,14 @@ func joinPorts(ports []int) string {
 		s[i] = strconv.Itoa(p)
 	}
 	return strings.Join(s, "/")
+}
+
+// quickViewFor returns the animated view when stdout is a terminal that can
+// show it, or nil.
+func quickViewFor(stdout io.Writer, target string) *quickview.View {
+	f, ok := stdout.(*os.File)
+	if !ok || !quickview.Supported(f) {
+		return nil
+	}
+	return quickview.New(f, quickview.Options{Target: target})
 }

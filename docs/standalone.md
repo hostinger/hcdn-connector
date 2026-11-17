@@ -69,6 +69,10 @@ Your quick tunnel is ready:
 Expires 2026-10-08 14:05 UTC.
 ```
 
+In a terminal the command shows the `pkg/quickview` view instead: the logo,
+a checklist while it connects, the link in a box and a pulsing Live status.
+Pipes, files and `NO_COLOR=1` keep the plain lines above.
+
 - The URL is random and lives at most 24 h. Run the command again for a new
   URL. The key stays in memory.
 - `--host-header localhost` sets the `Host` header for the service. Dev

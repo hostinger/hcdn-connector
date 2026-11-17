@@ -44,6 +44,11 @@ A named tunnel with its own client certificate uses `connector.New`; see
 [`examples/embed`](examples/embed). The API reference is on
 [pkg.go.dev](https://pkg.go.dev/github.com/hostinger/hcdn-connector/pkg/connector).
 
+To show a quick tunnel to a person at a terminal, `pkg/quickview` draws the
+Hostinger logo, a checklist while the tunnel connects, the link in a box and
+a pulsing Live status. Check `quickview.Supported(os.Stdout)` first and keep
+plain lines for pipes and logs.
+
 The library opens no listener, installs no signal handler and never calls
 `os.Exit`. It builds with `CGO_ENABLED=0` for Linux, macOS and Windows on
 amd64 and arm64. It never shares sensitive ports on this machine (SSH,
@@ -55,6 +60,8 @@ databases, debuggers and similar; see `pkg/localguard`).
   public API and follow semver from `v0.2.0`. While the module is `v0`, a
   breaking change bumps the minor version. Type aliases of `internal/...`
   types in `pkg/connector` are public API too.
+- `pkg/quickview` follows semver for its Go API. What it draws (text,
+  colours, layout) can change in any release.
 - `internal/...` has no compatibility promise.
 - Error text can hold text from the edge as received. Escape it before you
   print it to a terminal.
