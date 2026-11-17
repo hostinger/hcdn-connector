@@ -72,6 +72,9 @@ type Edge struct {
 	OwnerMode    string
 	OwnerIssuer  string
 	OwnerVerdict func(ticket string) (status, reason, clientID string)
+	// QuickMaxLifetime: refuse a quick leaf whose NotAfter - NotBefore is
+	// longer, as tunneld's quick.max_lifetime_secs does (0: no limit).
+	QuickMaxLifetime time.Duration
 
 	t         testing.TB
 	ln        net.Listener
@@ -223,6 +226,9 @@ func (e *Edge) verifyQuickOrCA(raw [][]byte, _ [][]*x509.Certificate) error {
 	if id := quickIDOf(leaf); id != "" {
 		if len(raw) != 1 || creds.QuickID(leaf.RawSubjectPublicKeyInfo, leaf.NotBefore) != id {
 			return errors.New("quick leaf: bad chain or id")
+		}
+		if e.QuickMaxLifetime > 0 && leaf.NotAfter.Sub(leaf.NotBefore) > e.QuickMaxLifetime {
+			return errors.New("quick leaf: lifetime over the maximum")
 		}
 		return nil
 	}

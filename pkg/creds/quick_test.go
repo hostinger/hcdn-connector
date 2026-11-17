@@ -93,7 +93,7 @@ func TestNewQuick(t *testing.T) {
 	if want := time.Date(2026, 10, 7, 14, 0, 7, 0, time.UTC); !leaf.NotBefore.Equal(want) {
 		t.Fatalf("NotBefore %s, want %s", leaf.NotBefore, want)
 	}
-	if leaf.NotAfter.Sub(leaf.NotBefore) != QuickLifetime {
+	if leaf.NotAfter.Sub(leaf.NotBefore) != DefaultQuickLifetime {
 		t.Fatalf("lifetime %s", leaf.NotAfter.Sub(leaf.NotBefore))
 	}
 	if QuickID(leaf.RawSubjectPublicKeyInfo, leaf.NotBefore) != c.TunnelID {
@@ -159,5 +159,26 @@ func TestQuickStoreWarnOff(t *testing.T) {
 	s.warnIfExpiring()
 	if buf.Len() != 0 {
 		t.Fatalf("SetWarnDays(0) must turn the warning off: %q", buf.String())
+	}
+}
+
+func TestNewQuickLifetime(t *testing.T) {
+	now := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	for _, d := range []time.Duration{MinQuickLifetime, 90 * time.Minute, MaxQuickLifetime, MaxQuickLifetime + 500*time.Millisecond} {
+		c, err := NewQuickLifetime([]string{"tunnel.example"}, now, d)
+		if err != nil {
+			t.Fatalf("%s: %v", d, err)
+		}
+		if got := c.Leaf.NotAfter.Sub(c.Leaf.NotBefore); got != d.Truncate(time.Second) {
+			t.Errorf("%s: window %s", d, got)
+		}
+		if !c.Leaf.NotBefore.Equal(now.Add(-5 * time.Minute)) {
+			t.Errorf("%s: NotBefore %s", d, c.Leaf.NotBefore)
+		}
+	}
+	for _, d := range []time.Duration{0, MinQuickLifetime - time.Second, MaxQuickLifetime + time.Second} {
+		if _, err := NewQuickLifetime([]string{"tunnel.example"}, now, d); err == nil {
+			t.Errorf("%s: no error", d)
+		}
 	}
 }

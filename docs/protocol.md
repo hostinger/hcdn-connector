@@ -243,7 +243,7 @@ never takes the CA chain path, and a named id never takes the quick path.
 |------|------|
 | Key | ECDSA P-256 only |
 | `NotBefore` | Whole seconds, UTC. The connector sets `now − 5 min` (clock skew) |
-| `NotAfter` | `NotBefore + 24 h`. tunneld refuses a longer window |
+| `NotAfter` | `NotBefore` + the lifetime: 24 h by default, 1 h to 7 d when the caller asks (`QuickOptions.Lifetime`). tunneld refuses a window longer than its `quick.max_lifetime_secs` in the handshake, with the alert of any refused leaf; `RunQuick` then tries a whoami with a 24 h leaf, and reports `ErrLifetimeRefused` when that one passes |
 | Id | `h = SHA-256(SPKI DER ‖ uint64_be(NotBefore unix seconds))`; `id = h[0:16]`; `id[6] = (id[6] & 0x0f) \| 0x80`; `id[8] = (id[8] & 0x3f) \| 0x80`; lowercase canonical UUID |
 | SPKI DER | The certificate `SubjectPublicKeyInfo` bytes |
 | Leaf | Self-signed, no intermediates, random 128-bit serial, `KeyUsage digitalSignature`, EKU `clientAuth`, exactly one URI SAN `hcdn-tunnel:<id>`, no other SAN, not a CA |
