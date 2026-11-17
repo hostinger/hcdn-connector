@@ -588,7 +588,7 @@ func TestRunQuickLifetimeRefused(t *testing.T) {
 }
 
 func TestRunQuickLifetimeOutOfRange(t *testing.T) {
-	for _, d := range []time.Duration{time.Minute, creds.MaxQuickLifetime + time.Second, -time.Hour} {
+	for _, d := range []time.Duration{500 * time.Millisecond, time.Minute, creds.MaxQuickLifetime + time.Second, -time.Hour} {
 		_, err := RunQuick(context.Background(), QuickOptions{URL: "http://127.0.0.1:1", Lifetime: d, Bootstrap: []string{"127.0.0.1"}})
 		var qe *QuickError
 		if err == nil || errors.As(err, &qe) || !strings.Contains(err.Error(), "QuickOptions.Lifetime") {

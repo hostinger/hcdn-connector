@@ -190,10 +190,11 @@ func RunQuick(ctx context.Context, o QuickOptions) (expired bool, err error) {
 	if len(ports) == 0 {
 		ports = []int{proto.PortDirect}
 	}
-	lifetime := o.Lifetime.Truncate(time.Second)
+	lifetime := o.Lifetime
 	if lifetime == 0 {
 		lifetime = creds.DefaultQuickLifetime
 	}
+	lifetime = lifetime.Truncate(time.Second)
 	if lifetime < creds.MinQuickLifetime || lifetime > creds.MaxQuickLifetime {
 		return false, fmt.Errorf("connector: QuickOptions.Lifetime %s: want %s to %s",
 			lifetime, creds.MinQuickLifetime, creds.MaxQuickLifetime)
