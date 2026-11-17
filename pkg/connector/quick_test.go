@@ -595,4 +595,9 @@ func TestRunQuickLifetimeOutOfRange(t *testing.T) {
 			t.Errorf("lifetime %s: %v", d, err)
 		}
 	}
+	// A bad bootstrap entry with a valid lifetime is not blamed on Lifetime.
+	_, err := RunQuick(context.Background(), QuickOptions{URL: "http://127.0.0.1:1", Lifetime: 48 * time.Hour, Bootstrap: []string{"not a host"}})
+	if err == nil || strings.Contains(err.Error(), "Lifetime") || !strings.Contains(err.Error(), "bootstrap") {
+		t.Errorf("bad bootstrap: %v", err)
+	}
 }

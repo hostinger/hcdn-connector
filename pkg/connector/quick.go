@@ -190,13 +190,17 @@ func RunQuick(ctx context.Context, o QuickOptions) (expired bool, err error) {
 	if len(ports) == 0 {
 		ports = []int{proto.PortDirect}
 	}
-	lifetime := o.Lifetime
+	lifetime := o.Lifetime.Truncate(time.Second)
 	if lifetime == 0 {
 		lifetime = creds.DefaultQuickLifetime
 	}
+	if lifetime < creds.MinQuickLifetime || lifetime > creds.MaxQuickLifetime {
+		return false, fmt.Errorf("connector: QuickOptions.Lifetime %s: want %s to %s",
+			lifetime, creds.MinQuickLifetime, creds.MaxQuickLifetime)
+	}
 	c, err := creds.NewQuickLifetime(bootstrap, time.Now(), lifetime)
 	if err != nil {
-		return false, fmt.Errorf("connector: QuickOptions.Lifetime: %w", err)
+		return false, err
 	}
 	store, err := quickStore(c, log)
 	if err != nil {
@@ -367,7 +371,6 @@ func watchCapExceeded(c *Connector, fn func(QuickPause)) (stop func()) {
 	return func() { close(done); wg.Wait() }
 }
 
-// isDialFailure: a TCP dial error, or a timeout (a firewall that drops SYN).
 // quickStore holds quick credentials in memory, without expiry warnings.
 func quickStore(c *creds.Credentials, log *slog.Logger) (*creds.Store, error) {
 	store, err := creds.NewMemoryStore(c, log, nil)
@@ -395,6 +398,7 @@ func acceptsDefaultLifetime(ctx context.Context, bootstrap []string, wopts Whoam
 	return err == nil
 }
 
+// isDialFailure: a TCP dial error, or a timeout (a firewall that drops SYN).
 func isDialFailure(err error) bool {
 	var op *net.OpError
 	if errors.As(err, &op) && op.Op == "dial" {
