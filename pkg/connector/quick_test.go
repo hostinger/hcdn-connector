@@ -3,6 +3,7 @@ package connector
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -599,5 +600,57 @@ func TestRunQuickLifetimeOutOfRange(t *testing.T) {
 	_, err := RunQuick(context.Background(), QuickOptions{URL: "http://127.0.0.1:1", Lifetime: 48 * time.Hour, Bootstrap: []string{"not a host"}})
 	if err == nil || strings.Contains(err.Error(), "Lifetime") || !strings.Contains(err.Error(), "bootstrap") {
 		t.Errorf("bad bootstrap: %v", err)
+	}
+}
+
+func TestRunQuickCommand(t *testing.T) {
+	const meta = `{"type":"nodejs","folder":"shop"}`
+	got := make(chan Command, 4)
+	r := startRunQuick(t, "", QuickOptions{AppMeta: meta, OnCommand: func(_ context.Context, c Command) error {
+		got <- c
+		if string(c.Body) == "again" {
+			return fmt.Errorf("deploy: %w", &CommandError{Status: 409, Code: "busy"})
+		}
+		return nil
+	}})
+	r.waitReady(t)
+	s := r.edge.WaitSession(t)
+	if s.HelloErr != nil || s.Hello.Header.Get(proto.HdrFeatures) != proto.Features+","+proto.FeatureCommand ||
+		s.Hello.Header.Get(proto.HdrAppMeta) != meta {
+		t.Fatalf("hello: %v %v", s.HelloErr, s.Hello.Header)
+	}
+	if res := s.Command(t, []byte("aaa.bbb.ccc")); res.StatusCode != 202 {
+		t.Fatalf("accepted: %d", res.StatusCode)
+	}
+	if c := <-got; string(c.Body) != "aaa.bbb.ccc" || c.Pop != "bnk" || c.EdgeNode != "bnk-edge1" {
+		t.Fatalf("command %+v", c)
+	}
+	if res := s.Command(t, []byte("again")); res.StatusCode != 409 || res.Header.Get(proto.HdrError) != "busy" {
+		t.Fatalf("refused: %d %v", res.StatusCode, res.Header)
+	}
+}
+
+func TestRunQuickWithoutCommand(t *testing.T) {
+	r := startRunQuick(t, "", QuickOptions{})
+	r.waitReady(t)
+	s := r.edge.WaitSession(t)
+	if s.Hello.Header.Get(proto.HdrFeatures) != proto.Features {
+		t.Fatalf("features %q", s.Hello.Header.Get(proto.HdrFeatures))
+	}
+	if _, ok := s.Hello.Header[proto.HdrAppMeta]; ok {
+		t.Fatal("hcdn-app-meta without AppMeta")
+	}
+	if res := s.Command(t, []byte("x")); res.StatusCode != 404 {
+		t.Fatalf("command without a handler: %d", res.StatusCode)
+	}
+}
+
+func TestRunQuickAppMetaInvalid(t *testing.T) {
+	for _, m := range []string{"café", "a\tb", "a\x7f", " {}", "{} ", strings.Repeat("a", MaxAppMetaBytes+1)} {
+		_, err := RunQuick(context.Background(), QuickOptions{URL: "http://127.0.0.1:1", AppMeta: m, Bootstrap: []string{"127.0.0.1"}})
+		var qe *QuickError
+		if err == nil || errors.As(err, &qe) || !strings.Contains(err.Error(), "QuickOptions.AppMeta") {
+			t.Errorf("AppMeta %q: %v", m, err)
+		}
 	}
 }

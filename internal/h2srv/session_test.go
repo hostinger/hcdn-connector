@@ -3,7 +3,10 @@
 package h2srv
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -878,5 +881,128 @@ func TestVisibleControlRoute(t *testing.T) {
 	}
 	if proxied.Load() != 0 {
 		t.Fatal("a control request reached the service")
+	}
+}
+
+func commandReq(t *testing.T, cc *http2.ClientConn, method string, body []byte, hdr map[string]string) *http.Response {
+	t.Helper()
+	req, _ := http.NewRequest(method, "https://edge"+proto.PathCommand, bytes.NewReader(body))
+	for k, v := range hdr {
+		req.Header.Set(k, v)
+	}
+	res, err := cc.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	return res
+}
+
+func TestHelloAppMetaAndCommandFeature(t *testing.T) {
+	_, cc, _ := start(t, table(t, "http://127.0.0.1:1"), &events{}, 0)
+	res := hello(t, cc, nil)
+	if res.Header.Get(proto.HdrFeatures) != proto.Features {
+		t.Fatalf("features without a handler: %q", res.Header.Get(proto.HdrFeatures))
+	}
+	if _, ok := res.Header[proto.HdrAppMeta]; ok {
+		t.Fatal("hcdn-app-meta without AppMeta")
+	}
+
+	_, cc2, _ := startOpts(t, table(t, "http://127.0.0.1:1"), &events{}, 0, func(o *Options) {
+		o.AppMeta = `{"type":"nodejs"}`
+		o.OnCommand = func(context.Context, Command) error { return nil }
+	})
+	res = hello(t, cc2, nil)
+	if res.Header.Get(proto.HdrFeatures) != proto.Features+","+proto.FeatureCommand || res.Header.Get(proto.HdrAppMeta) != `{"type":"nodejs"}` {
+		t.Fatalf("hello answer %v", res.Header)
+	}
+}
+
+func TestCommandControlRoute(t *testing.T) {
+	var proxied atomic.Int64
+	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { proxied.Add(1) }))
+	defer svc.Close()
+
+	// Without a handler the route does not exist, and is still never proxied.
+	_, cc0, _ := start(t, table(t, svc.URL), &events{}, 0)
+	hello(t, cc0, nil)
+	if res := commandReq(t, cc0, http.MethodPost, []byte("x"), nil); res.StatusCode != 404 {
+		t.Fatalf("no handler: %d", res.StatusCode)
+	}
+
+	var mu sync.Mutex
+	var got []Command
+	_, cc, _ := startOpts(t, table(t, svc.URL), &events{}, 0, func(o *Options) {
+		o.OnCommand = func(_ context.Context, c Command) error {
+			mu.Lock()
+			defer mu.Unlock()
+			got = append(got, c)
+			if string(c.Body) == "busy" {
+				return &CommandError{Status: 409, Code: "busy"}
+			}
+			return nil
+		}
+	})
+	if res := commandReq(t, cc, http.MethodPost, []byte("x"), nil); res.StatusCode != 400 {
+		t.Fatalf("command before hello: %d", res.StatusCode)
+	}
+	hello(t, cc, nil)
+	if res := commandReq(t, cc, http.MethodPost, []byte("x"), map[string]string{
+		proto.HdrRequestID: "rid", proto.HdrVhost: "shop.example.com"}); res.StatusCode != 404 {
+		t.Fatalf("visitor request on the command path: %d", res.StatusCode)
+	}
+	if res := commandReq(t, cc, http.MethodGet, nil, nil); res.StatusCode != 405 {
+		t.Fatalf("GET: %d", res.StatusCode)
+	}
+	if res := commandReq(t, cc, http.MethodPost, bytes.Repeat([]byte("a"), proto.MaxCommandBytes+1), nil); res.StatusCode != 413 {
+		t.Fatalf("over the cap: %d", res.StatusCode)
+	}
+	mu.Lock()
+	n := len(got)
+	mu.Unlock()
+	if n != 0 || proxied.Load() != 0 {
+		t.Fatalf("handler calls %d, proxied %d", n, proxied.Load())
+	}
+
+	cmd := bytes.Repeat([]byte("j"), proto.MaxCommandBytes)
+	if res := commandReq(t, cc, http.MethodPost, cmd, nil); res.StatusCode != 202 || res.Header.Get(proto.HdrError) != "" {
+		t.Fatalf("accepted: %d %v", res.StatusCode, res.Header)
+	}
+	if res := commandReq(t, cc, http.MethodPost, []byte("busy"), nil); res.StatusCode != 409 || res.Header.Get(proto.HdrError) != "busy" {
+		t.Fatalf("refused: %d %v", res.StatusCode, res.Header)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 2 || !bytes.Equal(got[0].Body, cmd) || got[0].EdgeNode != "pop1-edge1" {
+		t.Fatalf("commands %d, first from %s", len(got), got[0].EdgeNode)
+	}
+	if proxied.Load() != 0 {
+		t.Fatal("a command reached the service")
+	}
+}
+
+func TestCommandAnswer(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{"accepted", nil, 202, ""},
+		{"refused", &CommandError{Status: 409, Code: "busy"}, 409, "busy"},
+		{"wrapped", fmt.Errorf("deploy: %w", &CommandError{Status: 422, Code: "target_changed"}), 422, "target_changed"},
+		{"plain error", errors.New("boom"), 400, proto.ErrRefused},
+		{"status 5xx", &CommandError{Status: 500, Code: "x"}, 400, "x"},
+		{"status 2xx", &CommandError{Status: 202, Code: "x"}, 400, "x"},
+		{"empty code", &CommandError{Status: 403}, 403, proto.ErrRefused},
+		{"upper case code", &CommandError{Status: 403, Code: "Busy"}, 403, proto.ErrRefused},
+		{"code with a newline", &CommandError{Status: 403, Code: "busy\nx"}, 403, proto.ErrRefused},
+		{"code too long", &CommandError{Status: 403, Code: strings.Repeat("a", proto.MaxErrorCodeBytes+1)}, 403, proto.ErrRefused},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if status, code := commandAnswer(tc.err); status != tc.wantStatus || code != tc.wantCode {
+				t.Fatalf("got %d %q, want %d %q", status, code, tc.wantStatus, tc.wantCode)
+			}
+		})
 	}
 }

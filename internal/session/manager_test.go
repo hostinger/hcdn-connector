@@ -123,8 +123,7 @@ ingress:
 		Version:      "0.1.0-test",
 		Exit:         func(code int) { exits <- code },
 		DrainTimeout: o.drainTimeout,
-		OwnerTicket:  o.ownerTicket,
-		OwnerAbsent:  o.ownerAbsent,
+		Caller:       h2srv.Caller{OwnerTicket: o.ownerTicket, OwnerAbsent: o.ownerAbsent},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)

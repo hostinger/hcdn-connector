@@ -361,7 +361,8 @@ and `keepalive_connections: 0` disables keep-alive to the service.
 
 - Requests without `hcdn-request-id` are rejected with `400`. Only the edge
   speaks on a session. The control routes `/_hcdn/v1/hello`,
-  `/_hcdn/v1/goaway` and `/_hcdn/v1/visible` are exempt and never proxied.
+  `/_hcdn/v1/goaway`, `/_hcdn/v1/visible` and `/_hcdn/v1/command` are
+  exempt and never proxied.
 - Hop-by-hop headers and every `hcdn-*` / `x-hcdn-*` request header are
   removed before the service sees the request. `Hcdn-Tunnel-Id` is added.
   `X-Forwarded-For`, `X-Real-IP` and `X-Forwarded-Proto` pass through as

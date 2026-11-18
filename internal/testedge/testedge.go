@@ -6,6 +6,7 @@ package testedge
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -566,6 +567,19 @@ func (s *Session) Visible(t testing.TB, scope string) int {
 	}
 	res.Body.Close()
 	return res.StatusCode
+}
+
+// Command sends the command control request with body and returns the
+// answer (body closed).
+func (s *Session) Command(t testing.TB, body []byte) *http.Response {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, "https://connector"+proto.PathCommand, bytes.NewReader(body))
+	res, err := s.CC.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	return res
 }
 
 // StaticResolver maps names to fixed addresses (multi-address and dead endpoints).
