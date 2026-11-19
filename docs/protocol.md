@@ -107,24 +107,32 @@ The connector answers:
 200
 hcdn-connector-version: <version>
 hcdn-connector-id: <random per process>
-hcdn-features: ws,owner,visible
+hcdn-features: ws,owner,visible[,command]
 hcdn-connected-pops: fra,phx  # informational
 hcdn-transport: 7844 | 443-fallback
 hcdn-owner-ticket: <ticket>   # or, without a ticket:
 hcdn-owner-absent: no_token | opted_out | fetch_failed | not_requested | unsupported
+hcdn-app-meta: <text>         # optional
 ```
 
 - `hcdn-features` is a comma-separated list. `owner` means the connector
   sends one of the two owner headers on every hello and knows the goaway
   `owner_required`. `visible` means the connector reads the edge's
-  `visible` request (section 10). Connectors before it send `ws` only, or
-  `ws,owner`.
+  `visible` request (section 10). `command` means the connector answers
+  the `command` request (section 11); only a connector whose caller handles
+  commands sends it. Connectors before it send `ws` only, `ws,owner` or
+  `ws,owner,visible`.
 - `hcdn-edge-features` is a comma-separated list; the connector trims and
   lower-cases each item and ignores unknown ones. `visible` means the edge
   sends the `visible` request (section 10) on this session.
 - Every hello answer of a run carries the same `hcdn-owner-ticket`, or the
   same `hcdn-owner-absent` reason (section 9). A named tunnel sends
   `hcdn-owner-absent: not_requested`.
+- `hcdn-app-meta` is optional text from the program that runs the
+  connector, for the edge to record with the session. The connector treats
+  it as opaque. It is printable ASCII (0x20 to 0x7e) without leading or
+  trailing space, at most 1024 bytes, and the same on every hello answer of
+  a run.
 
 - A `hcdn-protocol` value other than `1` gets `400`, and the connector
   closes the session.
@@ -132,9 +140,11 @@ hcdn-owner-absent: no_token | opted_out | fetch_failed | not_requested | unsuppo
   `hcdn-edge-features`
   (invalid UTF-8 or a control character) gets the same `400` and close.
 - The connector closes a session without a hello within 10 s.
-- `hello`, `goaway` and `visible` carry no `hcdn-request-id`. The connector matches
-  them on the path before the visitor request checks. A control path with
-  `hcdn-request-id` gets `404` and is never proxied.
+- `hello`, `goaway`, `visible` and `command` carry no `hcdn-request-id`.
+  The connector matches them on the path before the visitor request checks.
+  A control path with `hcdn-request-id` gets `404` before any other check
+  (even a wrong method) and is never proxied, so a visitor cannot send a
+  command through the public URL.
 
 ## 4. Visitor request
 
@@ -344,3 +354,33 @@ hcdn-visible-scope: pop | node
   any session; a ready session on an edge without the feature; a ready
   session on an edge with the feature and no `visible` within its wait
   (3 s by default).
+
+## 11. Command
+
+An edge sends a command to a connector that advertised `command` in
+`hcdn-features`:
+
+```
+POST /_hcdn/v1/command
+<body: the command, at most 8 KiB>
+```
+
+- The connector does not parse or verify the body. It passes it to its
+  caller, which verifies it and decides.
+- The connector answers `202` when the caller accepts the command, or a
+  `4xx` with `hcdn-error: <reason>` when it refuses it. A reason is lower
+  case letters, digits and `_`, at most 64 bytes; the caller defines the
+  values. A refusal without a valid reason goes out as `refused`.
+- After the visitor request check of section 3, the connector itself
+  checks, in order: method (`405`), feature not advertised (`404`), before
+  the session's hello (`400`), body over 8 KiB (`413`) or unreadable
+  (`400`). The first that fails is the answer, so a `GET` gets `405` even
+  from a connector without the feature. These answers carry no
+  `hcdn-error`.
+- A stream reset instead of an answer means no verdict: the command may or
+  may not have been acted on. A caller that panics resets the stream with
+  `INTERNAL_ERROR`; the session stays up.
+- The same command can arrive on several sessions, on one PoP or on
+  several. The caller must accept a repeat without acting twice.
+- The answer goes back to the edge only. The connector reports nothing
+  else about a command.

@@ -373,3 +373,19 @@ func TestOptionsOwnerValidated(t *testing.T) {
 		}
 	}
 }
+
+func TestOptionsAppMetaValidated(t *testing.T) {
+	c, err := creds.NewQuick([]string{"127.0.0.1"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := creds.NewMemoryStore(c, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.TunnelID = c.TunnelID
+	if _, err := New(Options{Config: cfg, Credentials: s, AppMeta: "café"}); err == nil || !strings.Contains(err.Error(), "Options.AppMeta") {
+		t.Fatalf("New: %v", err)
+	}
+}

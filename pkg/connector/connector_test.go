@@ -432,3 +432,16 @@ func TestFacadeLocalPortGuard(t *testing.T) {
 		t.Fatal("AllowLocalPorts must be ports")
 	}
 }
+
+func TestCheckAppMeta(t *testing.T) {
+	for _, m := range []string{"", `{"k":"v","n":"caf\u00e9"}`, strings.Repeat("a", MaxAppMetaBytes)} {
+		if err := checkAppMeta("Options.AppMeta", m); err != nil {
+			t.Errorf("%q: %v", m, err)
+		}
+	}
+	for _, m := range []string{"café", "a\nb", "a\x7f", " {}", "{} ", strings.Repeat("a", MaxAppMetaBytes+1)} {
+		if err := checkAppMeta("Options.AppMeta", m); err == nil || !strings.Contains(err.Error(), "Options.AppMeta") {
+			t.Errorf("%q: %v", m, err)
+		}
+	}
+}
