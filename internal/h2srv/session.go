@@ -89,7 +89,9 @@ type Caller struct {
 	// OnCommand answers a command control request: nil accepts it (202), a
 	// *CommandError refuses it with its status and code, any other error
 	// with 400 and proto.ErrRefused. It adds command to hcdn-features.
-	// nil: no command feature, and the route answers 404.
+	// nil: no command feature, and the route answers 404. Its ctx is the
+	// request's: it ends when OnCommand returns, the edge drops the request,
+	// or the session closes.
 	OnCommand func(context.Context, Command) error
 }
 

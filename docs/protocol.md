@@ -142,8 +142,9 @@ hcdn-app-meta: <text>         # optional
 - The connector closes a session without a hello within 10 s.
 - `hello`, `goaway`, `visible` and `command` carry no `hcdn-request-id`.
   The connector matches them on the path before the visitor request checks.
-  A control path with `hcdn-request-id` gets `404` and is never proxied, so
-  a visitor cannot send a command through the public URL.
+  A control path with `hcdn-request-id` gets `404` before any other check
+  (even a wrong method) and is never proxied, so a visitor cannot send a
+  command through the public URL.
 
 ## 4. Visitor request
 
@@ -370,10 +371,15 @@ POST /_hcdn/v1/command
   `4xx` with `hcdn-error: <reason>` when it refuses it. A reason is lower
   case letters, digits and `_`, at most 64 bytes; the caller defines the
   values. A refusal without a valid reason goes out as `refused`.
-- The connector itself answers `405` for another method, `404` when it did
-  not advertise the feature, `400` before the session's hello or for a body
-  it cannot read, and `413` for a body over 8 KiB. These answers carry no
+- After the visitor request check of section 3, the connector itself
+  checks, in order: method (`405`), feature not advertised (`404`), before
+  the session's hello (`400`), body over 8 KiB (`413`) or unreadable
+  (`400`). The first that fails is the answer, so a `GET` gets `405` even
+  from a connector without the feature. These answers carry no
   `hcdn-error`.
+- A stream reset instead of an answer means no verdict: the command may or
+  may not have been acted on. A caller that panics resets the stream with
+  `INTERNAL_ERROR`; the session stays up.
 - The same command can arrive on several sessions, on one PoP or on
   several. The caller must accept a repeat without acting twice.
 - The answer goes back to the edge only. The connector reports nothing

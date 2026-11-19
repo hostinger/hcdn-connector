@@ -26,7 +26,9 @@ type (
 // refuses it with 400 and the reason "refused".
 //
 // It runs on the request goroutine of the session, and the edge waits for
-// the answer: return quickly and do long work on another goroutine. Calls
-// can run concurrently, and the edge can relay one command on several
-// sessions.
+// the answer: return quickly and do long work on another goroutine. ctx ends
+// when the call returns, the edge drops the request, or the session closes,
+// so do not pass it to work that outlives the call. Calls can run
+// concurrently, and the edge can relay one command on several sessions. A panic resets the command's stream
+// with INTERNAL_ERROR, so the edge gets no verdict; the session stays up.
 type CommandFunc func(ctx context.Context, c Command) error

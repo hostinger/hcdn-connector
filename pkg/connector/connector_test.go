@@ -434,7 +434,7 @@ func TestFacadeLocalPortGuard(t *testing.T) {
 }
 
 func TestCheckAppMeta(t *testing.T) {
-	for _, m := range []string{"", `{"target":"example.com","type":"nodejs","folder":"caf\u00e9"}`, strings.Repeat("a", MaxAppMetaBytes)} {
+	for _, m := range []string{"", `{"k":"v","n":"caf\u00e9"}`, strings.Repeat("a", MaxAppMetaBytes)} {
 		if err := checkAppMeta("Options.AppMeta", m); err != nil {
 			t.Errorf("%q: %v", m, err)
 		}

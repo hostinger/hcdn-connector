@@ -909,11 +909,11 @@ func TestHelloAppMetaAndCommandFeature(t *testing.T) {
 	}
 
 	_, cc2, _ := startOpts(t, table(t, "http://127.0.0.1:1"), &events{}, 0, func(o *Options) {
-		o.AppMeta = `{"type":"nodejs"}`
+		o.AppMeta = `{"k":"v"}`
 		o.OnCommand = func(context.Context, Command) error { return nil }
 	})
 	res = hello(t, cc2, nil)
-	if res.Header.Get(proto.HdrFeatures) != proto.Features+","+proto.FeatureCommand || res.Header.Get(proto.HdrAppMeta) != `{"type":"nodejs"}` {
+	if res.Header.Get(proto.HdrFeatures) != proto.Features+","+proto.FeatureCommand || res.Header.Get(proto.HdrAppMeta) != `{"k":"v"}` {
 		t.Fatalf("hello answer %v", res.Header)
 	}
 }
@@ -928,6 +928,19 @@ func TestCommandControlRoute(t *testing.T) {
 	hello(t, cc0, nil)
 	if res := commandReq(t, cc0, http.MethodPost, []byte("x"), nil); res.StatusCode != 404 {
 		t.Fatalf("no handler: %d", res.StatusCode)
+	}
+	if res := commandReq(t, cc0, http.MethodGet, nil, nil); res.StatusCode != 405 {
+		t.Fatalf("no handler, GET: %d", res.StatusCode)
+	}
+	// A visitor request beats every other check, the method included.
+	for _, m := range []string{http.MethodPost, http.MethodGet} {
+		if res := commandReq(t, cc0, m, nil, map[string]string{
+			proto.HdrRequestID: "rid", proto.HdrVhost: "shop.example.com"}); res.StatusCode != 404 {
+			t.Fatalf("no handler, visitor %s on the command path: %d", m, res.StatusCode)
+		}
+	}
+	if proxied.Load() != 0 {
+		t.Fatal("a visitor request on the command path reached the service")
 	}
 
 	var mu sync.Mutex
@@ -990,7 +1003,7 @@ func TestCommandAnswer(t *testing.T) {
 	}{
 		{"accepted", nil, 202, ""},
 		{"refused", &CommandError{Status: 409, Code: "busy"}, 409, "busy"},
-		{"wrapped", fmt.Errorf("deploy: %w", &CommandError{Status: 422, Code: "target_changed"}), 422, "target_changed"},
+		{"wrapped", fmt.Errorf("handler: %w", &CommandError{Status: 422, Code: "conflict"}), 422, "conflict"},
 		{"plain error", errors.New("boom"), 400, proto.ErrRefused},
 		{"status 5xx", &CommandError{Status: 500, Code: "x"}, 400, "x"},
 		{"status 2xx", &CommandError{Status: 202, Code: "x"}, 400, "x"},

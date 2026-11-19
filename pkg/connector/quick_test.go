@@ -604,12 +604,12 @@ func TestRunQuickLifetimeOutOfRange(t *testing.T) {
 }
 
 func TestRunQuickCommand(t *testing.T) {
-	const meta = `{"type":"nodejs","folder":"shop"}`
+	const meta = `{"k":"v"}`
 	got := make(chan Command, 4)
 	r := startRunQuick(t, "", QuickOptions{AppMeta: meta, OnCommand: func(_ context.Context, c Command) error {
 		got <- c
 		if string(c.Body) == "again" {
-			return fmt.Errorf("deploy: %w", &CommandError{Status: 409, Code: "busy"})
+			return fmt.Errorf("handler: %w", &CommandError{Status: 409, Code: "busy"})
 		}
 		return nil
 	}})
