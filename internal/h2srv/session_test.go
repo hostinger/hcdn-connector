@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1021,10 +1022,11 @@ func TestCommandAnswer(t *testing.T) {
 	}
 }
 
-// A :path that is not origin-form never reaches the service: the reverse proxy
-// would send it on as the request line. x/net resets such a stream itself
-// (PROTOCOL_ERROR, RFC 9113 8.3.1); originForm is the second check behind it.
-// Go's h2 client refuses to send one, so the fake edge writes HEADERS itself.
+// A :path that is not origin-form never reaches the service over a real stream.
+// Today x/net resets such a stream itself (PROTOCOL_ERROR, RFC 9113 8.3.1)
+// before ServeHTTP runs, so this test pins the whole stack; ServeHTTP's own
+// check is pinned by TestNonOriginFormRefusedByServeHTTP. Go's h2 client
+// refuses to send such a :path, so the fake edge writes HEADERS itself.
 func TestNonOriginFormPathRejected(t *testing.T) {
 	var hits atomic.Int32
 	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1126,5 +1128,52 @@ func TestOriginForm(t *testing.T) {
 		if got := originForm(r); got != c.ok {
 			t.Errorf("%s %q: %v, want %v", c.method, c.target, got, c.ok)
 		}
+	}
+}
+
+// ServeHTTP refuses a target that is not origin-form with 400 and never hands
+// it to the handler, whatever the h2 layer in front of it lets through.
+func TestNonOriginFormRefusedByServeHTTP(t *testing.T) {
+	var hits atomic.Int32
+	var results []string
+	srvConn, _ := pair(t)
+	s := New(srvConn, Options{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			w.WriteHeader(http.StatusNoContent)
+		}),
+		Version: "v", ConnectorID: "c", Transport: proto.TransportDirect,
+		MaxInflightDef: 1, OnRequestEnd: func(r string) { results = append(results, r) },
+	})
+	defer s.Close()
+	for _, c := range []struct {
+		method, target string
+		want           int
+	}{
+		{"GET", "/ok", http.StatusNoContent},
+		{"OPTIONS", "*", http.StatusNoContent},
+		{"GET", "http://evil.example/x", http.StatusBadRequest},
+		{"GET", "evil.example:80/x", http.StatusBadRequest},
+	} {
+		u, err := url.ParseRequestURI(c.target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := &http.Request{
+			Method: c.method, URL: u, RequestURI: c.target, Host: "shop.example.com",
+			Proto: "HTTP/2.0", ProtoMajor: 2,
+			Header: http.Header{http.CanonicalHeaderKey(proto.HdrRequestID): {"rid"}},
+		}
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		if w.Code != c.want {
+			t.Errorf("%s %s: %d, want %d", c.method, c.target, w.Code, c.want)
+		}
+	}
+	if n := hits.Load(); n != 2 {
+		t.Fatalf("the handler saw %d requests, want 2", n)
+	}
+	if want := []string{"rejected", "rejected"}; !slices.Equal(results, want) {
+		t.Fatalf("reported %q, want %q", results, want)
 	}
 }

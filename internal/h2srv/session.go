@@ -303,11 +303,11 @@ func (s *Session) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // originForm reports whether r's request-target (the :path) is origin-form,
-// "/path", or "*" for OPTIONS. The reverse proxy would pass any other form on
-// as the request line: an absolute-form target names a host of its own, which
-// some servers prefer to the Host the ingress rule matched, and an opaque one
-// ("host:80/x") reaches the service malformed. A WebSocket CONNECT carries no
-// :path; the bridge checks its hcdn-path.
+// "/path", or "*" for OPTIONS. The reverse proxy would send an opaque target
+// ("host:80/x") to the service as a malformed request line. An absolute-form
+// target ("http://host/x") names a host the ingress rule did not match; the
+// proxy replaces it today, but the session refuses it instead of relying on
+// that. A WebSocket CONNECT carries no :path; the bridge checks its hcdn-path.
 func originForm(r *http.Request) bool {
 	switch {
 	case r.Method == http.MethodConnect:
