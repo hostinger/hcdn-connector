@@ -114,7 +114,7 @@ compile, but they have no CI and no support.
 | Default admin socket | `/run/hcdn-connector/admin.sock` | `/var/run/hcdn-connector/admin.sock` | `%ProgramData%\hcdn-connector\run\admin.sock` |
 | Admin socket access | mode `0660` | same as Linux | the connector creates the directory with a DACL for SYSTEM, Administrators and the owner. It refuses an existing directory that Everyone, Users, Authenticated Users or Guests can read. |
 | Credentials file check | refused when group- or world-readable (`chmod 0600`) | same as Linux | refused when Everyone, Users, Authenticated Users or Guests can read it (`icacls`) |
-| Config, credentials and CA file trust | refused when the file is world-writable, or its directory is world-writable without the sticky bit | same as Linux | refused when an account other than SYSTEM, Administrators and the current user owns the file or its directory, or can change either (write, add a file or subdirectory, delete, change the DACL or owner) |
+| Config, credentials and CA file trust | refused when the file is world-writable, or when the file or a directory or symlink on its path (the working directory too, for a relative path) sits in a directory that is world-writable without the sticky bit, or in a sticky world-writable one such as `/tmp` and belongs to another account | same as Linux | refused when an account other than SYSTEM, Administrators and the current user owns the file or its directory, or can change either (write, add a file or subdirectory, delete, change the DACL or owner) |
 | Credentials reload | `SIGHUP` and a 10 s mtime poll | same as Linux | 10 s mtime poll only |
 | Stop | `SIGTERM`, `SIGINT` | same as Linux | Ctrl-C, Ctrl-Break, console close, logoff, shutdown |
 

@@ -254,6 +254,69 @@ func TestCheckSymlinkStickyOwnerUnix(t *testing.T) {
 	}
 }
 
+// A directory on the way can be renamed away and replaced like the file, so it
+// is judged in its own parent: a plain directory below a world-writable one is
+// refused, as is a working directory there when the path is relative.
+func TestCheckDirectoryOnPathUnix(t *testing.T) {
+	open := realDir(t)
+	sub := filepath.Join(open, "conf")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(sub, "config.yml")
+	if err := os.WriteFile(p, []byte("x: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadFile(p); err != nil {
+		t.Fatalf("private parents: %v", err)
+	}
+	if err := os.Chmod(open, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(open, 0o700) })
+	want := "directory " + sub + ": directory " + open + ": mode 0777 is world-writable"
+	if _, err := ReadFile(p); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("directory below a world-writable one: want %q, got %v", want, err)
+	}
+	t.Chdir(sub)
+	if _, err := ReadFile("config.yml"); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("relative path from there: want %q, got %v", want, err)
+	}
+	if err := os.Chmod(open, os.ModeSticky|0o777); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadFile("config.yml"); err != nil {
+		t.Fatalf("own directory in a sticky one: %v", err)
+	}
+}
+
+// The /tmp case: another account makes a plain directory in a sticky
+// world-writable directory and owns everything below it.
+func TestCheckDirectoryStickyOwnerUnix(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("needs root to chown")
+	}
+	sticky := realDir(t)
+	if err := os.Chmod(sticky, os.ModeSticky|0o777); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(sticky, "conf")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(sub, "config.yml")
+	if err := os.WriteFile(p, []byte("x: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(sub, 65534, -1); err != nil {
+		t.Fatal(err)
+	}
+	want := "directory " + sub + ": owned by uid 65534 in the world-writable directory " + sticky
+	if _, err := ReadFile(p); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("directory of another account in a sticky one: want %q, got %v", want, err)
+	}
+}
+
 // realDir is t.TempDir with symlinks resolved (/var is one on macOS), as
 // Check names directories.
 func realDir(t *testing.T) string {
