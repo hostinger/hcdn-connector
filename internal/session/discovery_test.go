@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -157,5 +158,25 @@ func TestWhoamiOwnerParse(t *testing.T) {
 	var nilW *Whoami
 	if nilW.OwnerMode() != "" {
 		t.Fatal("a nil reply asks for nothing")
+	}
+}
+
+func TestValidatePopsCapsTheList(t *testing.T) {
+	list := func(n int) []Pop {
+		pops := make([]Pop, n)
+		for i := range pops {
+			pops[i] = Pop{Code: fmt.Sprintf("p%d", i), Endpoint: fmt.Sprintf("p%d.tunnel.example", i)}
+		}
+		return pops
+	}
+	if err := validatePops(&PopsReply{Pops: list(MaxPops)}, []string{"bnk.tunnel.example"}, false); err != nil {
+		t.Fatalf("%d pops: %v", MaxPops, err)
+	}
+	if err := validatePops(&PopsReply{Pops: list(MaxPops + 1)}, []string{"bnk.tunnel.example"}, false); err == nil {
+		t.Fatalf("%d pops accepted", MaxPops+1)
+	}
+	pinned := make([]string, MaxPops+1)
+	if err := validatePops(&PopsReply{Pops: list(1), PinnedPops: pinned}, []string{"bnk.tunnel.example"}, false); err == nil {
+		t.Fatalf("%d pinned pops accepted", MaxPops+1)
 	}
 }
