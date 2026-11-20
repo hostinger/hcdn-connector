@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -607,5 +608,70 @@ func TestDiscoveryOver443(t *testing.T) {
 		if !reflect.DeepEqual(a, []string{proto.ALPNHTTP1}) {
 			t.Fatalf("443 discovery must offer http/1.1 only, saw %v", a)
 		}
+	}
+}
+
+// Probe measures at most ProbeConcurrency PoPs at once, however long the list.
+func TestProbeBoundsConcurrency(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	var mu sync.Mutex
+	open, peak := 0, 0
+	var held []net.Conn
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			open++
+			peak = max(peak, open)
+			held = append(held, c)
+			mu.Unlock()
+			// Never answer the ClientHello: the sample waits for its timeout.
+			go func() {
+				_, _ = io.Copy(io.Discard, c)
+				mu.Lock()
+				open--
+				mu.Unlock()
+			}()
+		}
+	}()
+	defer func() {
+		mu.Lock()
+		for _, c := range held {
+			c.Close()
+		}
+		mu.Unlock()
+	}()
+
+	ca := testpki.NewCA(t)
+	cs := newCreds(t, ca, "127.0.0.1")
+	port := ln.Addr().(*net.TCPAddr).Port
+	d := newDialer(t, ca, cs, []int{port}, port)
+	disc := &Discovery{Dialer: d, Bootstrap: func() []string { return cs.Current().BootstrapEndpoints }}
+	pops := make([]Pop, 3*ProbeConcurrency)
+	for i := range pops {
+		pops[i] = Pop{Code: fmt.Sprintf("p%d", i), Endpoint: "127.0.0.1", Allowed: true}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	res := disc.Probe(ctx, pops)
+	if len(res) != len(pops) {
+		t.Fatalf("%d results for %d pops", len(res), len(pops))
+	}
+	for _, r := range res {
+		if r.Err == nil {
+			t.Fatalf("%s: a silent edge cannot pass a probe", r.Pop.Code)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if peak > ProbeConcurrency || peak < 2 {
+		t.Fatalf("peak %d connections at once, want 2..%d", peak, ProbeConcurrency)
 	}
 }
