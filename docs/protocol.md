@@ -149,7 +149,8 @@ hcdn-app-meta: <text>         # optional
 ## 4. Visitor request
 
 - `:method`, `:scheme https`, `:authority` = visitor `Host`, `:path` =
-  the byte-exact request URI.
+  the byte-exact request URI in origin form (`/...`, or `*` for `OPTIONS`).
+  Any other `:path` is refused (stream reset or `400`) and never proxied.
 - `hcdn-request-id` is required. A request without it gets `400`.
 - `hcdn-vhost` names the vhost.
 - The connector removes hop-by-hop headers and every `hcdn-*` and

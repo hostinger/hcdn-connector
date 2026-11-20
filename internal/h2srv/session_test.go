@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
 
 	"github.com/hostinger/hcdn-connector/internal/ingress"
 	"github.com/hostinger/hcdn-connector/internal/proto"
@@ -1017,5 +1018,113 @@ func TestCommandAnswer(t *testing.T) {
 				t.Fatalf("got %d %q, want %d %q", status, code, tc.wantStatus, tc.wantCode)
 			}
 		})
+	}
+}
+
+// A :path that is not origin-form never reaches the service: the reverse proxy
+// would send it on as the request line. x/net resets such a stream itself
+// (PROTOCOL_ERROR, RFC 9113 8.3.1); originForm is the second check behind it.
+// Go's h2 client refuses to send one, so the fake edge writes HEADERS itself.
+func TestNonOriginFormPathRejected(t *testing.T) {
+	var hits atomic.Int32
+	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer svc.Close()
+	srvConn, cliConn := pair(t)
+	s := New(srvConn, Options{
+		Handler: ingress.NewHandler(table(t, svc.URL), tid, slog.Default(), nil),
+		Version: "v", ConnectorID: "c", Transport: proto.TransportDirect,
+	})
+	go func() { _ = s.Serve(context.Background()) }()
+	defer s.Close()
+
+	if _, err := io.WriteString(cliConn, http2.ClientPreface); err != nil {
+		t.Fatal(err)
+	}
+	fr := http2.NewFramer(cliConn, cliConn)
+	fr.ReadMetaHeaders = hpack.NewDecoder(4096, nil)
+	if err := fr.WriteSettings(); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	enc := hpack.NewEncoder(&buf)
+	stream := uint32(1)
+	status := func(method, path string) string {
+		t.Helper()
+		buf.Reset()
+		for _, f := range [][2]string{
+			{":method", method}, {":scheme", "https"}, {":authority", "shop.example.com"}, {":path", path},
+			{"hcdn-request-id", "rid"},
+		} {
+			_ = enc.WriteField(hpack.HeaderField{Name: f[0], Value: f[1]})
+		}
+		id := stream
+		stream += 2
+		if err := fr.WriteHeaders(http2.HeadersFrameParam{StreamID: id, BlockFragment: buf.Bytes(), EndStream: true, EndHeaders: true}); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			f, err := fr.ReadFrame()
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch f := f.(type) {
+			case *http2.SettingsFrame:
+				if !f.IsAck() {
+					_ = fr.WriteSettingsAck()
+				}
+			case *http2.MetaHeadersFrame:
+				if f.StreamID == id {
+					return f.PseudoValue("status")
+				}
+			case *http2.RSTStreamFrame:
+				if f.StreamID == id {
+					return "reset:" + f.ErrCode.String()
+				}
+			}
+		}
+	}
+	for _, c := range []struct{ method, path, want string }{
+		{"GET", "/ok", "204"},
+		{"GET", "http://evil.example/x", "refused"},
+		{"GET", "evil.example:80/x", "refused"},
+		{"GET", "//evil.example/x", "204"}, // origin-form: a path that starts with two slashes
+		{"OPTIONS", "*", "204"},
+	} {
+		got := status(c.method, c.path)
+		t.Logf("%s %s -> %s", c.method, c.path, got)
+		if got == "400" || got == "reset:PROTOCOL_ERROR" {
+			got = "refused"
+		}
+		if got != c.want {
+			t.Errorf("%s %s: %s, want %s", c.method, c.path, got, c.want)
+		}
+	}
+	if n := hits.Load(); n != 3 {
+		t.Fatalf("the service saw %d requests, want 3", n)
+	}
+}
+
+func TestOriginForm(t *testing.T) {
+	for _, c := range []struct {
+		method, target string
+		ok             bool
+	}{
+		{"GET", "/", true},
+		{"GET", "/a?b=1", true},
+		{"GET", "//two/slashes", true},
+		{"OPTIONS", "*", true},
+		{"GET", "*", false},
+		{"GET", "http://evil.example/x", false},
+		{"GET", "evil.example:80/x", false},
+		{"GET", "", false},
+		{"CONNECT", "shop.example.com:443", true}, // WebSocket: hcdn-path is checked by the bridge
+	} {
+		r := &http.Request{Method: c.method, RequestURI: c.target}
+		if got := originForm(r); got != c.ok {
+			t.Errorf("%s %q: %v, want %v", c.method, c.target, got, c.ok)
+		}
 	}
 }
