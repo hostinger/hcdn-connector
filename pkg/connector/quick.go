@@ -36,8 +36,9 @@ var (
 	// ErrQuickNotOffered: whoami answered without class quick or without a
 	// hostname (an edge older than tunneld 0.3.0).
 	ErrQuickNotOffered = errors.New("connector: the edge does not offer quick tunnels")
-	// ErrTakenDown: goaway revoked; the tunnel was taken down (*ExitError Code 78).
-	ErrTakenDown = errors.New("connector: the quick tunnel was taken down")
+	// ErrTakenDown: goaway revoked; the owner stopped the tunnel or it was
+	// taken down, which the edge does not tell apart (*ExitError Code 78).
+	ErrTakenDown = errors.New("connector: the quick tunnel was stopped or taken down")
 	// ErrCertRejected: goaway unknown_serial; the edge no longer accepts the
 	// tunnel certificate (*ExitError Code 78). A new run gets a new URL.
 	ErrCertRejected = errors.New("connector: the edge no longer accepts the tunnel certificate")
@@ -154,6 +155,10 @@ type QuickOptions struct {
 // A var so tests can shorten it.
 var quickStopAt = func(notAfter time.Time) time.Time { return notAfter.Add(-time.Minute) }
 
+// quickRevokedHint ends the "tunnel revoked" log line. Neutral: the owner
+// stopping their Preview and an abuse takedown both arrive as goaway revoked.
+const quickRevokedHint = "This Preview was stopped; run the command again for a new link."
+
 // quickWhoamiTimeout bounds the first whoami and LinkOwner.
 const quickWhoamiTimeout = 20 * time.Second
 
@@ -257,7 +262,7 @@ func RunQuick(ctx context.Context, o QuickOptions) (expired bool, err error) {
 	cfg.ServerCAFile = o.ServerCAFile
 	conn, err := New(Options{
 		Config: cfg, Credentials: store, Version: o.Version, Log: log,
-		Hints: &Hints{Revoked: "This tunnel was taken down."}, Owner: link, VisibleWait: o.VisibleWait,
+		Hints: &Hints{Revoked: quickRevokedHint}, Owner: link, VisibleWait: o.VisibleWait,
 		AppMeta: o.AppMeta, OnCommand: o.OnCommand,
 	})
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -518,7 +519,8 @@ func TestRunQuickLegacyEarlyReady(t *testing.T) {
 }
 
 func TestRunQuickRevokedBeforeReady(t *testing.T) {
-	r := startRunQuick(t, "", QuickOptions{}, withNoHello)
+	var logs syncBuf
+	r := startRunQuick(t, "", QuickOptions{Logger: slog.New(slog.NewTextHandler(&logs, nil))}, withNoHello)
 	s := r.edge.WaitSession(t)
 	s.Goaway(t, proto.ReasonRevoked, 0)
 	res := r.wait(t)
@@ -528,6 +530,10 @@ func TestRunQuickRevokedBeforeReady(t *testing.T) {
 	}
 	if len(r.ready) != 0 || len(r.reach) != 0 {
 		t.Fatal("OnReady after a revoked run")
+	}
+	// An owner stop and a takedown look the same, so the log line is neutral.
+	if l := logs.String(); !strings.Contains(l, "level=ERROR") || !strings.Contains(l, quickRevokedHint) || strings.Contains(l, "taken down") {
+		t.Fatalf("log %q", l)
 	}
 }
 
