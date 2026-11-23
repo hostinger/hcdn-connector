@@ -57,8 +57,9 @@ type QuickError struct {
 	// Err is the cause: the whoami or LinkOwner error, the class the edge
 	// reported, or the *ExitError of the goaway.
 	Err error
-	// Owner is the outcome of LinkOwner when Kind is ErrOwnerRequired, for
-	// example OtherEnvironment for the message.
+	// Owner is the outcome of LinkOwner, zero when the run failed before it.
+	// With ErrOwnerRequired, OtherEnvironment explains the refusal. With
+	// ErrTakenDown, a Ticket means the owner may have stopped the tunnel.
 	Owner OwnerLink
 }
 
@@ -167,6 +168,13 @@ func quickRevokedHint(link OwnerLink) string {
 	return "This tunnel was taken down."
 }
 
+// quickGoawayKinds is the QuickError Kind of each goaway that ends a run.
+var quickGoawayKinds = map[string]error{
+	proto.ReasonRevoked:       ErrTakenDown,
+	proto.ReasonOwnerRequired: ErrOwnerRequired,
+	proto.ReasonUnknownSerial: ErrCertRejected,
+}
+
 // quickWhoamiTimeout bounds the first whoami and LinkOwner.
 const quickWhoamiTimeout = 20 * time.Second
 
@@ -253,7 +261,7 @@ func RunQuick(ctx context.Context, o QuickOptions) (expired bool, err error) {
 	case errors.Is(err, ErrOwnerRequired):
 		return false, &QuickError{Kind: ErrOwnerRequired, Err: err, Owner: link}
 	case err != nil:
-		return false, &QuickError{Kind: ErrQuickRefused, Err: err}
+		return false, &QuickError{Kind: ErrQuickRefused, Err: err, Owner: link}
 	}
 
 	cfg := config.Default()
@@ -290,18 +298,12 @@ func RunQuick(ctx context.Context, o QuickOptions) (expired bool, err error) {
 	err = runAnnounced(rctx, conn, tunnel, o, log, linked)
 	stopWatch()
 	var ee *ExitError
-	switch {
-	case errors.As(err, &ee):
-		switch ee.Reason {
-		case proto.ReasonRevoked:
-			return false, &QuickError{Kind: ErrTakenDown, Err: ee}
-		case proto.ReasonOwnerRequired:
-			return false, &QuickError{Kind: ErrOwnerRequired, Err: ee, Owner: link}
-		case proto.ReasonUnknownSerial:
-			return false, &QuickError{Kind: ErrCertRejected, Err: ee}
+	if errors.As(err, &ee) {
+		if kind, ok := quickGoawayKinds[ee.Reason]; ok {
+			return false, &QuickError{Kind: kind, Err: ee, Owner: link}
 		}
-		return false, err
-	case err != nil:
+	}
+	if err != nil {
 		return false, err
 	}
 	return ctx.Err() == nil && errors.Is(rctx.Err(), context.DeadlineExceeded), nil
