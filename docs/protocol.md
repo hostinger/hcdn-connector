@@ -260,7 +260,7 @@ never takes the CA chain path, and a named id never takes the quick path.
 | Leaf | Self-signed, no intermediates, random 128-bit serial, `KeyUsage digitalSignature`, EKU `clientAuth`, exactly one URI SAN `hcdn-tunnel:<id>`, no other SAN, not a CA |
 | Hostname | Chosen by the edge, which owns the zone (`hostingerpreview.com` in production, `hostingerpreview.dev` on staging). Either `<id without dashes>.<zone>`, or a word label `<color>-<animal>-<8 digits>.<zone>` derived from the id with a key only the edge holds. The connector learns the hostname from `whoami`, serves only that hostname, and never derives it |
 | Lifetime | tunneld aborts quick sessions at `NotAfter`. The connector stops 1 min before. No renewal: a new certificate is a new id and a new hostname |
-| Takedown | goaway `revoked` (exit 78). tunneld keeps the id refused for the rest of its life |
+| Stop or takedown | goaway `revoked` (exit 78), whether the owner stopped the tunnel or it was taken down. tunneld keeps the id refused for the rest of its life |
 | Limits | goaway `cap_exceeded` when the network of the client (/24 or /56) or the node holds too many quick tunnels |
 
 The TLS 1.3 CertificateVerify proves possession of the private key. A client

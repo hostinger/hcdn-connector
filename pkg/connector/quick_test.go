@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -517,17 +518,43 @@ func TestRunQuickLegacyEarlyReady(t *testing.T) {
 	}
 }
 
+// The hint ends the error log line: neutral when the run sends an owner
+// ticket, so an owner could have stopped it, and a takedown without one. The
+// error carries the owner link, so a caller can tell the two apart before any
+// OnReady.
 func TestRunQuickRevokedBeforeReady(t *testing.T) {
-	r := startRunQuick(t, "", QuickOptions{}, withNoHello)
-	s := r.edge.WaitSession(t)
-	s.Goaway(t, proto.ReasonRevoked, 0)
-	res := r.wait(t)
-	var ee *ExitError
-	if !errors.Is(res.err, ErrTakenDown) || !errors.As(res.err, &ee) || ee.Code != 78 || res.expired {
-		t.Fatalf("%+v", res)
-	}
-	if len(r.ready) != 0 || len(r.reach) != 0 {
-		t.Fatal("OnReady after a revoked run")
+	ticket := loadOwnerVectors(t).Valid[0].Ticket
+	for _, tc := range []struct {
+		name, mode string
+		owner      OwnerTicketFunc
+		wantTicket string
+		hint, not  string
+	}{
+		{"no ticket", "", nil, "", "This tunnel was taken down.", "Preview"},
+		{"ticket", OwnerModeLog, func(context.Context, string, time.Time) (string, error) { return ticket, nil },
+			ticket, "This Preview was stopped; run the command again for a new link.", "taken down"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var logs syncBuf
+			r := startRunQuick(t, tc.mode, QuickOptions{Owner: tc.owner, Logger: slog.New(slog.NewTextHandler(&logs, nil))}, withNoHello)
+			s := r.edge.WaitSession(t)
+			s.Goaway(t, proto.ReasonRevoked, 0)
+			res := r.wait(t)
+			var ee *ExitError
+			var qe *QuickError
+			if !errors.Is(res.err, ErrTakenDown) || !errors.As(res.err, &ee) || ee.Code != 78 || res.expired || !errors.As(res.err, &qe) {
+				t.Fatalf("%+v", res)
+			}
+			if qe.Owner.Ticket != tc.wantTicket || qe.Owner.Mode != tc.mode {
+				t.Fatalf("owner %+v", qe.Owner)
+			}
+			if len(r.ready) != 0 || len(r.reach) != 0 {
+				t.Fatal("OnReady after a revoked run")
+			}
+			if l := logs.String(); !strings.Contains(l, "level=ERROR") || !strings.Contains(l, tc.hint) || strings.Contains(l, tc.not) {
+				t.Fatalf("log %q", l)
+			}
+		})
 	}
 }
 
