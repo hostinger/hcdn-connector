@@ -155,9 +155,17 @@ type QuickOptions struct {
 // A var so tests can shorten it.
 var quickStopAt = func(notAfter time.Time) time.Time { return notAfter.Add(-time.Minute) }
 
-// quickRevokedHint ends the "tunnel revoked" log line. Neutral: the owner
-// stopping their Preview and an abuse takedown both arrive as goaway revoked.
-const quickRevokedHint = "This Preview was stopped; run the command again for a new link."
+// quickRevokedHint ends the "tunnel revoked" log line. A run whose hellos
+// carry an owner ticket may have an owner on the edge, even when the whoami
+// check of the ticket failed, and the edge sends goaway revoked for an owner
+// stop and a takedown alike, so its hint is neutral. Without a ticket nobody
+// owns the tunnel: revoked is a takedown.
+func quickRevokedHint(link OwnerLink) string {
+	if link.Ticket != "" {
+		return "This Preview was stopped; run the command again for a new link."
+	}
+	return "This tunnel was taken down."
+}
 
 // quickWhoamiTimeout bounds the first whoami and LinkOwner.
 const quickWhoamiTimeout = 20 * time.Second
@@ -262,7 +270,7 @@ func RunQuick(ctx context.Context, o QuickOptions) (expired bool, err error) {
 	cfg.ServerCAFile = o.ServerCAFile
 	conn, err := New(Options{
 		Config: cfg, Credentials: store, Version: o.Version, Log: log,
-		Hints: &Hints{Revoked: quickRevokedHint}, Owner: link, VisibleWait: o.VisibleWait,
+		Hints: &Hints{Revoked: quickRevokedHint(link)}, Owner: link, VisibleWait: o.VisibleWait,
 		AppMeta: o.AppMeta, OnCommand: o.OnCommand,
 	})
 	if err != nil {
