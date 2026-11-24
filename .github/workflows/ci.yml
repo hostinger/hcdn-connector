@@ -36,6 +36,11 @@ jobs:
           grep -q "GO_VERSION: \"${GO_VERSION}\"" .github/workflows/release.yml || { echo "release.yml GO_VERSION differs"; exit 1; }
           grep -q "^FROM golang:${GO_VERSION}-" packaging/Dockerfile || { echo "packaging/Dockerfile golang tag differs"; exit 1; }
           go version | grep -q "go${GO_VERSION} "
+      - name: VERSION is MAJOR.MINOR.PATCH[-PRE]
+        # The same pattern as the tag check in release.yml.
+        run: |
+          v="$(cat VERSION)"
+          [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "VERSION '$v' is not MAJOR.MINOR.PATCH[-PRE]"; exit 1; }
       - name: gofmt
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - name: staticcheck
@@ -133,11 +138,18 @@ jobs:
             echo "== $t"
             GOOS=${t%/*} GOARCH=${t#*/} CGO_ENABLED=0 go build -o /dev/null .
           done
-      - name: gorelease (API diff of pkg/...)
+      - name: gorelease (API diff of pkg/..., and the VERSION bump)
+        # A changed VERSION is the next release: gorelease refuses one that is
+        # not higher than the last tag.
         run: |
           base=$(git describe --tags --abbrev=0 2>/dev/null || true)
           if [ -z "$base" ]; then echo "no tag yet"; exit 0; fi
-          go run golang.org/x/exp/cmd/gorelease@${GORELEASE_VERSION} -base="$base"
+          next="v$(cat VERSION)"
+          if [ "$next" = "$base" ]; then
+            go run golang.org/x/exp/cmd/gorelease@"${GORELEASE_VERSION}" -base="$base"
+          else
+            go run golang.org/x/exp/cmd/gorelease@"${GORELEASE_VERSION}" -base="$base" -version="$next"
+          fi
 
   package:
     runs-on: ubuntu-latest
@@ -164,3 +176,59 @@ jobs:
           name: packages-${{ matrix.goarch }}
           path: dist/
           retention-days: 7
+
+  # A push to main whose VERSION has no v<VERSION> tag yet: create that tag
+  # (annotated, unsigned, by github-actions[bot]) on the pushed commit, then run
+  # release.yml on it. A tag created with GITHUB_TOKEN starts no workflow on
+  # its own; a workflow_dispatch does, and on the tag ref release.yml signs
+  # with the same certificate identity (release.yml@refs/tags/v...) as a
+  # pushed tag. An existing tag is never moved or recreated.
+  release-tag:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint, test, goline, cross, embed, package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # create the tag
+      actions: write # dispatch release.yml
+    concurrency:
+      group: release-tag
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: tag v<VERSION> if it does not exist, and start release.yml on it
+        run: |
+          set -euo pipefail
+          v="$(cat VERSION)"
+          [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::VERSION '$v' is not MAJOR.MINOR.PATCH[-PRE]"; exit 1; }
+          tag="v$v"
+          # The commit the tag points at ("" if absent); the peeled ^{} line is an annotated tag's commit.
+          tagged="$(git ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}" \
+            | awk '{ c = $1 } $2 ~ /\^\{\}$/ { p = $1 } END { print (p ? p : c) }')"
+          release() {
+            gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$tag"
+            echo "::notice::started release.yml on $tag"
+            echo "### $tag: tagged ${GITHUB_SHA:0:7}, release.yml started" >> "$GITHUB_STEP_SUMMARY"
+          }
+          if [ -z "$tagged" ]; then
+            obj="$(gh api "repos/$GITHUB_REPOSITORY/git/tags" \
+              -f tag="$tag" -f message="hcdn-connector $v" -f object="$GITHUB_SHA" -f type=commit \
+              -f 'tagger[name]=github-actions[bot]' \
+              -f 'tagger[email]=41898282+github-actions[bot]@users.noreply.github.com' \
+              -f "tagger[date]=$(date -u +%Y-%m-%dT%H:%M:%SZ)" --jq .sha)"
+            # Creating a ref that exists fails (HTTP 422): a tag made meanwhile stays as it is.
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$obj" --silent
+            release
+          elif [ "$tagged" = "$GITHUB_SHA" ] \
+            && ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            && [ "$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --branch "$tag" --json databaseId --jq length)" = 0 ]; then
+            # A re-run after an attempt that created the tag but did not start the release.
+            release
+          else
+            echo "::notice::$tag already exists (on ${tagged:0:7}): nothing to release. Change VERSION to release."
+            echo "### $tag exists (on ${tagged:0:7}): no release" >> "$GITHUB_STEP_SUMMARY"
+          fi

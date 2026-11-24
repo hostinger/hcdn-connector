@@ -1,4 +1,5 @@
-VERSION ?= 0.1.1
+# The next or current release; a merge to main that changes it releases it (CONTRIBUTING.md).
+VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.0.0-dev)
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 # Commit time, not wall-clock time: two builds of one commit are identical.
 DATE    ?= $(shell TZ=UTC0 git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
