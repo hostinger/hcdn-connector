@@ -34,6 +34,18 @@ public Go API. The README section "Compatibility" describes the compatibility
 promise. A change that breaks the API needs a minor version bump while the
 module is `v0`.
 
+## Releases
+
+The version is in [`VERSION`](VERSION) (`MAJOR.MINOR.PATCH`, optionally
+`-PRE`). To release, change it in a pull request. After that pull request
+merges and CI passes on `main`, CI creates the tag `v<VERSION>` on the merge
+commit and runs the release workflow on that tag. A merge that leaves
+`VERSION` alone releases nothing, and CI never moves or recreates a tag that
+already exists.
+
+CI runs `gorelease` against the last tag with the new version, so a
+`VERSION` that is not higher than the last tag fails the pull request.
+
 ## License
 
 By contributing, you agree that your contribution is licensed under the
