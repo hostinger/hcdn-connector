@@ -7,11 +7,14 @@
 #     image name agreed with the CDN team.
 # Actions are pinned by commit SHA: this workflow can write releases and sign as the repo.
 # Third-party build tools run in the read-only `build` job; only `release` holds write + OIDC.
+# Runs for a v* tag: pushed by hand, or created by ci.yml's release-tag job, which
+# dispatches this workflow on the tag (a tag created with GITHUB_TOKEN starts no workflow).
 name: release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch: # on a v* tag ref only; the test job skips any other ref
 
 permissions:
   contents: read
@@ -24,6 +27,7 @@ env:
 
 jobs:
   test:
+    if: startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false
       matrix:
@@ -148,6 +152,7 @@ jobs:
       - name: GitHub release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
+          tag_name: ${{ github.ref_name }}
           files: dist/*
           generate_release_notes: true
       # - name: container image (needs REGISTRY_TOKEN + agreed image name)
